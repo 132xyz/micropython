@@ -384,7 +384,7 @@ void USB1_OTG_HS_IRQHandler(void) {
 void OTG_HS_IRQHandler(void) {
     IRQ_ENTER(OTG_HS_IRQn);
     #if MICROPY_HW_TINYUSB_STACK
-    tud_int_handler(0);
+    tud_int_handler(1); // OTG_HS is always RHPORT1 on F4/F7/H7 (not N6, which uses USB1_OTG_HS_IRQHandler)
     #else
     HAL_PCD_IRQHandler(&pcd_hs_handle);
     #endif
@@ -470,7 +470,7 @@ void OTG_FS_WKUP_IRQHandler(void) {
 
     #if defined(STM32L4)
     EXTI->PR1 = USB_OTG_FS_WAKEUP_EXTI_LINE;
-    #elif !defined(STM32H5) && !defined(STM32H7)
+    #elif !defined(STM32H5) && !defined(STM32H7) && !defined(STM32U5)
     /* Clear EXTI pending Bit*/
     __HAL_USB_FS_EXTI_CLEAR_FLAG();
     #endif

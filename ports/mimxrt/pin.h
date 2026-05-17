@@ -77,6 +77,7 @@ enum {
     PIN_AF_MODE_ALT8,
     PIN_AF_MODE_ALT9,
     PIN_AF_MODE_ALT10,
+    PIN_AF_MODE_ALT11,
 };
 
 enum {
@@ -117,6 +118,7 @@ typedef struct {
 typedef struct {
     ADC_Type *instance;
     uint8_t channel;
+    uint8_t channel_group;
 } machine_pin_adc_obj_t;
 
 typedef struct {

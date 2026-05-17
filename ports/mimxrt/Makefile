@@ -56,7 +56,7 @@ MCUX_SDK_DIR = lib/nxp_driver/sdk
 MCU_DIR = $(MCUX_SDK_DIR)/devices/$(MCU_SERIES)
 
 # Select linker scripts based on MCU_SERIES
-LD_FILES = boards/$(MCU_SERIES).ld boards/common.ld
+LD_FILES ?= boards/$(MCU_SERIES).ld boards/common.ld
 
 # Parameter configurations for generation
 AF_FILE = boards/$(MCU_SERIES)_af.csv
@@ -93,19 +93,11 @@ endif
 # =============================================================================
 
 # TinyUSB Stack source
-SRC_TINYUSB_C += \
-	lib/tinyusb/src/class/cdc/cdc_device.c \
-	lib/tinyusb/src/class/dfu/dfu_rt_device.c \
-	lib/tinyusb/src/class/hid/hid_device.c \
-	lib/tinyusb/src/class/midi/midi_device.c \
-	lib/tinyusb/src/class/msc/msc_device.c \
-	lib/tinyusb/src/class/usbtmc/usbtmc_device.c \
-	lib/tinyusb/src/class/vendor/vendor_device.c \
-	lib/tinyusb/src/common/tusb_fifo.c \
-	lib/tinyusb/src/device/usbd.c \
-	lib/tinyusb/src/device/usbd_control.c \
-	lib/tinyusb/src/portable/chipidea/ci_hs/dcd_ci_hs.c \
-	lib/tinyusb/src/tusb.c
+-include $(TOP)/lib/tinyusb/src/tinyusb.mk
+TINYUSB_SRC_C := $(sort $(addprefix lib/tinyusb/, \
+	$(TINYUSB_SRC_C) \
+	src/portable/chipidea/ci_hs/dcd_ci_hs.c \
+	))
 
 # All settings for Ethernet support are controller by the value of MICROPY_PY_LWIP
 ifeq ($(MICROPY_PY_LWIP),1)
@@ -113,6 +105,7 @@ SRC_ETH_C += \
 	$(MCUX_SDK_DIR)/drivers/enet/fsl_enet.c \
 	hal/phy/device/phydp83825/fsl_phydp83825.c \
 	hal/phy/device/phydp83848/fsl_phydp83848.c \
+	hal/phy/device/phydp83867/fsl_phydp83867.c \
 	hal/phy/device/phyksz8081/fsl_phyksz8081.c \
 	hal/phy/device/phylan8720/fsl_phylan8720.c \
 	hal/phy/device/phyrtl8211f/fsl_phyrtl8211f.c \
@@ -136,6 +129,7 @@ SRC_HAL_IMX_C += \
 	$(MCUX_SDK_DIR)/drivers/lpi2c/fsl_lpi2c.c \
 	$(MCUX_SDK_DIR)/drivers/lpspi/fsl_lpspi.c \
 	$(MCUX_SDK_DIR)/drivers/lpspi/fsl_lpspi_edma.c \
+	$(MCUX_SDK_DIR)/drivers/lpuart/fsl_lpuart.c \
 	$(MCUX_SDK_DIR)/drivers/pit/fsl_pit.c \
 	$(MCUX_SDK_DIR)/drivers/pwm/fsl_pwm.c \
 	$(MCUX_SDK_DIR)/drivers/sai/fsl_sai.c \
@@ -150,6 +144,10 @@ SRC_HAL_IMX_C += hal/fsl_flexspi_nor_boot.c
 else
 SRC_HAL_IMX_C += $(MCU_DIR)/xip/fsl_flexspi_nor_boot.c
 endif
+
+# UART IRQ wrapper for UART.IRQ_RXIDLE support (see machine_uart.c for implementation details)
+# Double wrapping is required because SDK stores function pointers in s_lpuartIsr[] dispatch table
+LDFLAGS += --wrap=LPUART_TransferCreateHandle --wrap=LPUART_TransferHandleIRQ
 
 INC_HAL_IMX += \
 	-I$(TOP)/$(MCU_DIR) \
@@ -184,9 +182,16 @@ endif
 ifeq ($(MCU_SERIES),$(filter $(MCU_SERIES), MIMXRT1015 MIMXRT1021 MIMXRT1052 MIMXRT1062 MIMXRT1064 MIMXRT1176))
 SRC_HAL_IMX_C += \
 	$(MCUX_SDK_DIR)/drivers/qtmr_1/fsl_qtmr.c \
+	$(MCUX_SDK_DIR)/drivers/enc/fsl_enc.c \
+	$(MCUX_SDK_DIR)/drivers/xbara/fsl_xbara.c \
 	$(MCU_DIR)/drivers/fsl_romapi.c
 
-INC_HAL_IMX += -I$(TOP)/$(MCUX_SDK_DIR)/drivers/qtmr_1
+INC_HAL_IMX += \
+	-I$(TOP)/$(MCUX_SDK_DIR)/drivers/enc \
+	-I$(TOP)/$(MCUX_SDK_DIR)/drivers/xbara \
+	-I$(TOP)/$(MCUX_SDK_DIR)/drivers/qtmr_1
+
+CFLAGS += -DMICROPY_PY_MACHINE_QECNT=1
 endif
 
 # If not empty, then it is 10xx.
@@ -243,7 +248,6 @@ SRC_C += \
 	eth.c \
 	fatfs_port.c \
 	flash.c \
-	hal/fsl_lpuart.c \
 	hal/pwm_backport.c \
 	help.c \
 	led.c \
@@ -251,6 +255,7 @@ SRC_C += \
 	machine_i2c.c \
 	machine_led.c \
 	machine_pin.c \
+	machine_encoder.c \
 	machine_rtc.c \
 	machine_sdcard.c \
 	machine_spi.c \
@@ -265,6 +270,7 @@ SRC_C += \
 	network_lan.c \
 	pendsv.c \
 	pin.c \
+	psram.c \
 	sdcard.c \
 	sdio.c \
 	systick.c \
@@ -382,7 +388,7 @@ hal/resethandler_MIMXRT10xx.S: $(GEN_FLEXRAM_CONFIG_SRC)
 # =============================================================================
 
 # List of sources for qstr extraction
-SRC_QSTR += $(SRC_C) $(SHARED_SRC_C) $(GEN_PINS_SRC)
+SRC_QSTR += $(SRC_C) $(SHARED_SRC_C) $(SRC_CXX) $(GEN_PINS_SRC)
 
 # =============================================================================
 # Compiler Flags
@@ -427,7 +433,6 @@ CFLAGS += \
 	-mcpu=cortex-m7 \
 	-mthumb \
 	-mtune=cortex-m7 \
-	-nostdlib \
 	-std=c99 \
 	-Wall \
 	-Wdouble-promotion \
@@ -491,10 +496,12 @@ MPY_CROSS_FLAGS += -march=armv7m
 # =============================================================================
 
 LDFLAGS += \
+	-nostdlib \
 	--cref \
 	--gc-sections \
 	--print-memory-usage \
-	-Map=$@.map
+	-Map=$@.map \
+    --wrap=LPUART_TransferCreateHandle --wrap=LPUART_TransferHandleIRQ
 
 # LDDEFINES are used for link time adaptation of linker scripts, utilizing
 #	the C preprocessor. Therefore keep LDDEFINES separated from LDFLAGS!
@@ -523,11 +530,12 @@ LIBS = $(shell $(CC) $(CFLAGS) -print-libgcc-file-name)
 OBJ += $(PY_O)
 OBJ += $(addprefix $(BUILD)/, $(LIBM_SRC_C:.c=.o))
 OBJ += $(addprefix $(BUILD)/, $(SRC_C:.c=.o))
+OBJ += $(addprefix $(BUILD)/, $(SRC_CXX:.cpp=.o))
 OBJ += $(addprefix $(BUILD)/, $(SHARED_SRC_C:.c=.o))
 OBJ += $(addprefix $(BUILD)/, $(DRIVERS_SRC_C:.c=.o))
 OBJ += $(addprefix $(BUILD)/, $(SRC_S:.s=.o))
 OBJ += $(addprefix $(BUILD)/, $(SRC_SS:.S=.o))
-OBJ += $(addprefix $(BUILD)/, $(SRC_TINYUSB_C:.c=.o))
+OBJ += $(addprefix $(BUILD)/, $(TINYUSB_SRC_C:.c=.o))
 OBJ += $(addprefix $(BUILD)/, $(SRC_HAL_C:.c=.o))
 OBJ += $(addprefix $(BUILD)/, $(SRC_HAL_IMX_C:.c=.o))
 OBJ += $(addprefix $(BUILD)/, $(SRC_ETH_C:.c=.o))
@@ -579,7 +587,7 @@ $(HEADER_BUILD)/qstrdefs.generated.h: $(BOARD_DIR)/mpconfigboard.h
 $(GEN_FLEXRAM_CONFIG_SRC): $(HEADER_BUILD)
 	$(ECHO) "Create $@"
 	$(Q)$(PYTHON) $(MAKE_FLEXRAM_LD) -d $(TOP)/$(MCU_DIR)/$(MCU_SERIES)$(MCU_CORE).h \
-		-f $(TOP)/$(MCU_DIR)/$(MCU_SERIES)$(MCU_CORE)_features.h -l boards/$(MCU_SERIES).ld -c $(MCU_SERIES) > $@
+		-f $(TOP)/$(MCU_DIR)/$(MCU_SERIES)$(MCU_CORE)_features.h $(addprefix -l,$(LD_FILES)) -c $(MCU_SERIES) > $@
 
 # Use a pattern rule here so that make will only call make-pins.py once to make
 # both pins_gen.c and pins.h

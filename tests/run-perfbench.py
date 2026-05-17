@@ -10,9 +10,13 @@ import sys
 import argparse
 from glob import glob
 
-run_tests_module = __import__("run-tests")
-
-prepare_script_for_target = run_tests_module.prepare_script_for_target
+from test_utils import (
+    base_path,
+    pyboard,
+    get_test_instance,
+    prepare_script_for_target,
+    create_test_report,
+)
 
 # Paths for host executables
 if os.name == "nt":
@@ -49,7 +53,7 @@ def run_script_on_target(target, script):
         try:
             target.enter_raw_repl()
             output = target.exec_(script)
-        except run_tests_module.pyboard.PyboardError as er:
+        except pyboard.PyboardError as er:
             err = er
     else:
         # Run local executable
@@ -97,15 +101,14 @@ def run_benchmarks(args, target, param_n, param_m, n_average, test_list):
         print(test_file + ": ", end="")
 
         # Check if test should be skipped
-        skip = (
-            skip_complex
-            and test_file.find("bm_fft") != -1
-            or skip_native
-            and test_file.find("viper_") != -1
-        )
-        if skip:
-            test_results.append((test_file, "skip", ""))
-            print("SKIP")
+        skip_reason = None
+        if skip_complex and test_file.endswith(("bm_fft.py", "misc_mandel.py")):
+            skip_reason = "complex not supported"
+        elif skip_native and test_file.find("viper_") != -1:
+            skip_reason = "native not supported"
+        if skip_reason:
+            test_results.append((test_file, "skip", skip_reason))
+            print("SKIP:", skip_reason)
             continue
 
         # Create test script
@@ -277,7 +280,7 @@ def main():
     cmd_parser.add_argument(
         "-r",
         "--result-dir",
-        default=run_tests_module.base_path("results"),
+        default=base_path("results"),
         help="directory for test results",
     )
     cmd_parser.add_argument(
@@ -298,9 +301,7 @@ def main():
     M = int(args.M[0])
     n_average = int(args.average)
 
-    target = run_tests_module.get_test_instance(
-        args.test_instance, args.baudrate, args.user, args.password
-    )
+    target = get_test_instance(args.test_instance, args.baudrate, args.user, args.password)
     if target is None:
         # Use the unix port of MicroPython.
         target = [MICROPYTHON, "-X", "emit=" + args.emit]
@@ -328,7 +329,7 @@ def main():
 
     os.makedirs(args.result_dir, exist_ok=True)
     test_results = run_benchmarks(args, target, N, M, n_average, tests)
-    res = run_tests_module.create_test_report(args, test_results)
+    res = create_test_report(args, test_results)
 
     if hasattr(target, "exit_raw_repl"):
         target.exit_raw_repl()

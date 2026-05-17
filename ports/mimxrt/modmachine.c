@@ -55,6 +55,13 @@
 #else
 #define MICROPY_PY_MACHINE_SDCARD_ENTRY
 #endif
+#if MICROPY_PY_MACHINE_QECNT
+#define MICROPY_PY_MACHINE_ENCODER_ENTRY { MP_ROM_QSTR(MP_QSTR_Encoder), MP_ROM_PTR(&machine_encoder_type) },
+#define MICROPY_PY_MACHINE_COUNTER_ENTRY { MP_ROM_QSTR(MP_QSTR_Counter), MP_ROM_PTR(&machine_counter_type) },
+#else
+#define MICROPY_PY_MACHINE_ENCODER_ENTRY
+#define MICROPY_PY_MACHINE_COUNTER_ENTRY
+#endif
 
 #define MICROPY_PY_MACHINE_EXTRA_GLOBALS \
     MICROPY_PY_MACHINE_LED_ENTRY \
@@ -62,6 +69,8 @@
     { MP_ROM_QSTR(MP_QSTR_Timer),               MP_ROM_PTR(&machine_timer_type) }, \
     { MP_ROM_QSTR(MP_QSTR_RTC),                 MP_ROM_PTR(&machine_rtc_type) }, \
     MICROPY_PY_MACHINE_SDCARD_ENTRY \
+    MICROPY_PY_MACHINE_ENCODER_ENTRY \
+    MICROPY_PY_MACHINE_COUNTER_ENTRY \
     \
     /* Reset reasons */ \
     { MP_ROM_QSTR(MP_QSTR_PWRON_RESET),         MP_ROM_INT(MP_PWRON_RESET) }, \
@@ -124,7 +133,7 @@ static void mp_machine_set_freq(size_t n_args, const mp_obj_t *args) {
 }
 
 static void mp_machine_idle(void) {
-    MICROPY_EVENT_POLL_HOOK;
+    mp_event_wait_ms(1);
 }
 
 static void mp_machine_lightsleep(size_t n_args, const mp_obj_t *args) {

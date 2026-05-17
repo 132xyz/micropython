@@ -41,6 +41,7 @@
 #include "lib/littlefs/lfs2_util.h"
 #include "extmod/modmachine.h"
 #include "extmod/modnetwork.h"
+#include "extmod/machine_can.h"
 #include "extmod/vfs.h"
 #include "extmod/vfs_fat.h"
 #include "extmod/vfs_lfs.h"
@@ -607,6 +608,10 @@ soft_reset:
     extint_init0();
     timer_init0();
 
+    #if MICROPY_PY_NETWORK
+    mod_network_init();
+    #endif
+
     #if MICROPY_HW_ENABLE_CAN
     pyb_can_init0();
     #endif
@@ -698,10 +703,6 @@ soft_reset:
     servo_init();
     #endif
 
-    #if MICROPY_PY_NETWORK
-    mod_network_init();
-    #endif
-
     // At this point everything is fully configured and initialised.
 
     // Run main.py (or whatever else a board configures at this stage).
@@ -763,9 +764,15 @@ soft_reset_exit:
     #endif
     #if MICROPY_HW_ENABLE_CAN
     pyb_can_deinit_all();
+    #if MICROPY_PY_MACHINE_CAN
+    machine_can_deinit_all();
     #endif
+    #endif // MICROPY_HW_ENABLE_CAN
     #if MICROPY_HW_ENABLE_DAC
     dac_deinit_all();
+    #endif
+    #if MICROPY_PY_MACHINE_PWM
+    machine_pwm_deinit_all();
     #endif
     #if MICROPY_PY_MACHINE
     machine_deinit();

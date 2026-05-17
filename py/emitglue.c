@@ -107,17 +107,17 @@ void mp_emit_glue_assign_native(mp_raw_code_t *rc, mp_raw_code_kind_t kind, cons
     // Some architectures require flushing/invalidation of the I/D caches,
     // so that the generated native code which was created in data RAM will
     // be available for execution from instruction RAM.
-    #if MICROPY_EMIT_THUMB || MICROPY_EMIT_INLINE_THUMB || (MP_NATIVE_ARCH_ARMV6M <= MPY_FEATURE_ARCH && MPY_FEATURE_ARCH <= MP_NATIVE_ARCH_ARMV7EMDP)
+    #if defined(__thumb__) || defined(__thumb2__)
     #if __ICACHE_PRESENT == 1
     // Flush D-cache, so the code emitted is stored in RAM.
     MP_HAL_CLEAN_DCACHE(fun_data, fun_len);
     // Invalidate I-cache, so the newly-created code is reloaded from RAM.
     SCB_InvalidateICache();
     #endif
-    #elif MICROPY_EMIT_ARM || (MPY_FEATURE_ARCH == MP_NATIVE_ARCH_ARMV6)
+    #elif defined(__arm__)
     #if (defined(__linux__) && defined(__GNUC__)) || __ARM_ARCH == 7
     __builtin___clear_cache((void *)fun_data, (char *)fun_data + fun_len);
-    #elif defined(__arm__)
+    #else
     // Flush I-cache and D-cache.
     asm volatile (
         "0:"
@@ -127,7 +127,7 @@ void mp_emit_glue_assign_native(mp_raw_code_t *rc, mp_raw_code_kind_t kind, cons
         "mcr p15, 0, r0, c7, c7, 0\n" // invalidate I-cache and D-cache
         : : : "r0", "cc");
     #endif
-    #elif (MICROPY_EMIT_RV32 || MICROPY_EMIT_INLINE_RV32 || (MPY_FEATURE_ARCH == MP_NATIVE_ARCH_RV32IMC)) && defined(MP_HAL_CLEAN_DCACHE)
+    #elif defined(__riscv) && defined(MP_HAL_CLEAN_DCACHE)
     // Flush the D-cache.
     MP_HAL_CLEAN_DCACHE(fun_data, fun_len);
     #endif
@@ -183,7 +183,7 @@ mp_obj_t mp_make_function_from_proto_fun(mp_proto_fun_t proto_fun, const mp_modu
     // def_kw_args must be MP_OBJ_NULL or a dict
     assert(def_args == NULL || def_args[1] == MP_OBJ_NULL || mp_obj_is_type(def_args[1], &mp_type_dict));
 
-    #if MICROPY_MODULE_FROZEN_MPY
+    #if MICROPY_MODULE_FROZEN_MPY || MICROPY_PY_FUNCTION_ATTRS_CODE
     if (mp_proto_fun_is_bytecode(proto_fun)) {
         const uint8_t *bc = proto_fun;
         mp_obj_t fun = mp_obj_new_fun_bc(def_args, bc, context, NULL);
